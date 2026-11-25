@@ -1,6 +1,6 @@
 // =========================================================
 // AVENTURA EM PARNAÍBA - Em Busca do Tesouro
-// Jogo de plataforma 2D - Canvas puro
+// Jogo de plataforma 2D - Canvas puro (Multiplataforma)
 // =========================================================
 
 const canvas = document.getElementById('game');
@@ -8,7 +8,7 @@ const ctx = canvas.getContext('2d');
 const W = canvas.width;
 const H = canvas.height;
 
-// HUD
+// HUD e controles de interface
 const livesEl = document.getElementById('lives');
 const crystalsEl = document.getElementById('crystals');
 const phaseEl = document.getElementById('phase');
@@ -19,11 +19,16 @@ const overlayText = document.getElementById('overlay-text');
 const overlayControls = document.getElementById('overlay-controls');
 const startBtn = document.getElementById('start-btn');
 
-// Constantes de física
+const btnLeft = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+const btnJump = document.getElementById('btn-jump');
+
+// Constantes de física (baseadas em 60 FPS)
 const GRAVITY = 0.7;
 const JUMP_POWER = -14;
 const MOVE_SPEED = 4.5;
 const FRICTION = 0.82;
+const TARGET_STEP_MS = 1000 / 60;
 
 // Estado do jogo
 const state = {
@@ -33,10 +38,16 @@ const state = {
     crystals: 0,
     totalCrystals: 0,
     keys: {},
+    touch: {
+        left: false,
+        right: false,
+        jump: false
+    },
     camera: { x: 0 },
     invulnerable: 0,
     gameOver: false,
-    won: false
+    won: false,
+    lastTime: 0
 };
 
 // Jogador
@@ -195,23 +206,111 @@ const phases = [
 ];
 
 // =========================================================
-// INPUT
+// INPUT (TECLADO, TOUCH/MOUSE E GAMEPAD)
 // =========================================================
+const PREVENTED_KEYS = new Set([
+    "arrowleft", "arrowright", "arrowup", "arrowdown", " ", "spacebar",
+    "a", "d", "w", "s"
+]);
+
 window.addEventListener('keydown', (e) => {
-    state.keys[e.key] = true;
-    if (["ArrowLeft", "ArrowRight", " ", "ArrowUp", "ArrowDown"].includes(e.key)) {
+    const key = e.key.toLowerCase();
+    state.keys[key] = true;
+    if (PREVENTED_KEYS.has(key)) {
         e.preventDefault();
     }
-});
+}, { passive: false });
+
 window.addEventListener('keyup', (e) => {
-    state.keys[e.key] = false;
+    state.keys[e.key.toLowerCase()] = false;
 });
+
+function clearAllInputs() {
+    state.keys = {};
+    state.touch.left = false;
+    state.touch.right = false;
+    state.touch.jump = false;
+    [btnLeft, btnRight, btnJump].forEach((btn) => {
+        if (btn) btn.classList.remove('active');
+    });
+}
+
+window.addEventListener('blur', clearAllInputs);
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearAllInputs();
+});
+
+function bindTouchControl(btn, controlKey) {
+    if (!btn) return;
+
+    const onDown = (e) => {
+        e.preventDefault();
+        state.touch[controlKey] = true;
+        btn.classList.add('active');
+    };
+
+    const onUp = (e) => {
+        e.preventDefault();
+        state.touch[controlKey] = false;
+        btn.classList.remove('active');
+    };
+
+    btn.addEventListener('pointerdown', onDown, { passive: false });
+    btn.addEventListener('pointerup', onUp, { passive: false });
+    btn.addEventListener('pointercancel', onUp, { passive: false });
+    btn.addEventListener('pointerleave', onUp, { passive: false });
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+bindTouchControl(btnLeft, 'left');
+bindTouchControl(btnRight, 'right');
+bindTouchControl(btnJump, 'jump');
+
+function readGamepadInput() {
+    if (typeof navigator.getGamepads !== 'function') {
+        return { left: false, right: false, jump: false };
+    }
+    const gamepads = navigator.getGamepads();
+    for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (!gp) continue;
+
+        const axisX = gp.axes && gp.axes.length > 0 ? gp.axes[0] : 0;
+        const dpadLeft = Boolean(gp.buttons[14] && gp.buttons[14].pressed);
+        const dpadRight = Boolean(gp.buttons[15] && gp.buttons[15].pressed);
+        const btnA = Boolean(gp.buttons[0] && gp.buttons[0].pressed);
+        const dpadUp = Boolean(gp.buttons[12] && gp.buttons[12].pressed);
+
+        const left = axisX < -0.35 || dpadLeft;
+        const right = axisX > 0.35 || dpadRight;
+        const jump = btnA || dpadUp;
+
+        if (left || right || jump) {
+            return { left, right, jump };
+        }
+    }
+    return { left: false, right: false, jump: false };
+}
+
+function getActiveControls() {
+    const gp = readGamepadInput();
+    return {
+        left: Boolean(state.keys["arrowleft"] || state.keys["a"] || state.touch.left || gp.left),
+        right: Boolean(state.keys["arrowright"] || state.keys["d"] || state.touch.right || gp.right),
+        jump: Boolean(
+            state.keys[" "] || state.keys["spacebar"] ||
+            state.keys["arrowup"] || state.keys["w"] ||
+            state.touch.jump || gp.jump
+        )
+    };
+}
 
 startBtn.addEventListener('click', () => {
     if (state.gameOver || state.won) {
         resetGame();
     }
     state.running = true;
+    state.lastTime = performance.now();
     overlay.classList.add('hidden');
 });
 
@@ -228,7 +327,6 @@ function loadPhase(n) {
     state.camera.x = 0;
     state.invulnerable = 0;
     state.phase = n;
-    // Reset cristais da fase atual
     p.crystals.forEach(c => c.collected = false);
     p.enemies.forEach(e => { e.alive = true; });
     if (p.treasure) p.treasure.found = false;
@@ -263,33 +361,35 @@ function aabb(a, b) {
 // =========================================================
 // UPDATE
 // =========================================================
-function update() {
+function update(dt = 1) {
     if (!state.running) return;
 
+    const controls = getActiveControls();
+
     // Movimento horizontal
-    if (state.keys["ArrowRight"]) {
+    if (controls.right && !controls.left) {
         player.vx = MOVE_SPEED;
         player.facing = 1;
-    } else if (state.keys["ArrowLeft"]) {
+    } else if (controls.left && !controls.right) {
         player.vx = -MOVE_SPEED;
         player.facing = -1;
     } else {
-        player.vx *= FRICTION;
+        player.vx *= Math.pow(FRICTION, dt);
         if (Math.abs(player.vx) < 0.1) player.vx = 0;
     }
 
     // Pulo
-    if ((state.keys[" "] || state.keys["Spacebar"]) && player.onGround) {
+    if (controls.jump && player.onGround) {
         player.vy = JUMP_POWER;
         player.onGround = false;
     }
 
     // Gravidade
-    player.vy += GRAVITY;
+    player.vy += GRAVITY * dt;
     if (player.vy > 18) player.vy = 18;
 
     // Move X e resolve colisão
-    player.x += player.vx;
+    player.x += player.vx * dt;
     const phase = phases[state.phase - 1];
     const solids = [...phase.platforms, ...phase.obstacles];
     for (const s of solids) {
@@ -301,7 +401,7 @@ function update() {
     }
 
     // Move Y e resolve colisão
-    player.y += player.vy;
+    player.y += player.vy * dt;
     player.onGround = false;
     for (const s of solids) {
         if (aabb(player, s)) {
@@ -320,7 +420,7 @@ function update() {
     if (player.x < 0) player.x = 0;
     if (player.x + player.w > phase.width) player.x = phase.width - player.w;
 
-    // Queda no água -> perde vida
+    // Queda na água -> perde vida
     if (player.y > H + 100) {
         hurtPlayer(true);
     }
@@ -331,7 +431,7 @@ function update() {
 
     // Animação do jogador
     if (Math.abs(player.vx) > 0.5 && player.onGround) {
-        player.animTimer++;
+        player.animTimer += dt;
         if (player.animTimer > 8) {
             player.animTimer = 0;
             player.animFrame = (player.animFrame + 1) % 4;
@@ -353,12 +453,11 @@ function update() {
     // Inimigos (caranguejos)
     for (const e of phase.enemies) {
         if (!e.alive) continue;
-        e.x += e.vx;
+        e.x += e.vx * dt;
         if (e.x < e.minX) { e.x = e.minX; e.vx *= -1; }
         if (e.x + e.w > e.maxX) { e.x = e.maxX - e.w; e.vx *= -1; }
 
         if (aabb(player, e)) {
-            // Pulo em cima mata o caranguejo
             if (player.vy > 2 && player.y + player.h - e.y < 20) {
                 e.alive = false;
                 player.vy = JUMP_POWER * 0.7;
@@ -387,6 +486,7 @@ function update() {
         phase.treasure.found = true;
         state.won = true;
         state.running = false;
+        clearAllInputs();
         showOverlay(
             "🏆 Tesouro Encontrado!",
             `Parabéns, explorador! Você encontrou o tesouro lendário de Parnaíba! Cristais coletados: ${state.totalCrystals}`,
@@ -395,7 +495,9 @@ function update() {
     }
 
     // Invulnerabilidade temporária
-    if (state.invulnerable > 0) state.invulnerable--;
+    if (state.invulnerable > 0) {
+        state.invulnerable = Math.max(0, state.invulnerable - dt);
+    }
 }
 
 function hurtPlayer(fell) {
@@ -406,19 +508,18 @@ function hurtPlayer(fell) {
     if (state.lives <= 0) {
         state.gameOver = true;
         state.running = false;
+        clearAllInputs();
         showOverlay(
             "💀 Fim de Jogo",
             "O explorador não resistiu aos perigos de Parnaíba... O tesouro continua escondido.",
             "Tentar Novamente"
         );
     } else if (fell) {
-        // Respawn
         player.x = 80;
         player.y = 300;
         player.vx = 0;
         player.vy = 0;
     } else {
-        // Empurra para trás
         player.vx = -player.facing * 6;
         player.vy = -8;
     }
@@ -439,7 +540,6 @@ function draw() {
     const phase = phases[state.phase - 1];
     const cam = state.camera.x;
 
-    // Céu
     const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
     skyGrad.addColorStop(0, phase.bg.sky);
     skyGrad.addColorStop(0.6, phase.bg.horizon);
@@ -447,13 +547,11 @@ function draw() {
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, W, H);
 
-    // Sol
     ctx.fillStyle = "rgba(255, 230, 150, 0.9)";
     ctx.beginPath();
     ctx.arc(W - 100, 90, 45, 0, Math.PI * 2);
     ctx.fill();
 
-    // Nuvens (parallax)
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     for (let i = 0; i < 5; i++) {
         const cx = ((i * 400 - cam * 0.3) % (W + 200)) - 100;
@@ -461,7 +559,6 @@ function draw() {
         drawCloud(cx, cy);
     }
 
-    // Água de fundo (parallax)
     ctx.fillStyle = phase.bg.water;
     ctx.fillRect(0, 380, W, 80);
     ctx.fillStyle = "rgba(255,255,255,0.15)";
@@ -473,40 +570,31 @@ function draw() {
     ctx.save();
     ctx.translate(-cam, 0);
 
-    // Decorações de fundo
     for (const d of phase.decorations) {
         if (d.type === "boat") drawBoat(d.x, d.y);
         else if (d.type === "mangrove") drawMangrove(d.x, d.y);
     }
 
-    // Plataformas
     for (const p of phase.platforms) {
         drawPlatform(p);
     }
 
-    // Obstáculos
     for (const o of phase.obstacles) {
         drawObstacle(o);
     }
 
-    // Cristais
     const t = Date.now() / 200;
     for (const c of phase.crystals) {
         if (!c.collected) drawCrystal(c.x, c.y, t);
     }
 
-    // Inimigos (caranguejos)
     for (const e of phase.enemies) {
         if (e.alive) drawCrab(e);
     }
 
-    // Portal
     if (phase.portal) drawPortal(phase.portal);
-
-    // Tesouro
     if (phase.treasure) drawTreasure(phase.treasure);
 
-    // Jogador
     drawPlayer();
 
     ctx.restore();
@@ -522,7 +610,6 @@ function drawCloud(x, y) {
 }
 
 function drawBoat(x, y) {
-    // Casco
     ctx.fillStyle = "#6b3410";
     ctx.beginPath();
     ctx.moveTo(x - 40, y);
@@ -531,10 +618,8 @@ function drawBoat(x, y) {
     ctx.lineTo(x - 30, y + 20);
     ctx.closePath();
     ctx.fill();
-    // Mastro
     ctx.fillStyle = "#3d2008";
     ctx.fillRect(x - 2, y - 50, 4, 50);
-    // Vela
     ctx.fillStyle = "#f5e8c7";
     ctx.beginPath();
     ctx.moveTo(x, y - 48);
@@ -545,7 +630,6 @@ function drawBoat(x, y) {
 }
 
 function drawMangrove(x, y) {
-    // Raízes
     ctx.strokeStyle = "#5a3a1a";
     ctx.lineWidth = 3;
     for (let i = -2; i <= 2; i++) {
@@ -554,7 +638,6 @@ function drawMangrove(x, y) {
         ctx.quadraticCurveTo(x + i * 12, y + 30, x + i * 6, y);
         ctx.stroke();
     }
-    // Copa
     ctx.fillStyle = "#2d5a2d";
     ctx.beginPath();
     ctx.arc(x, y - 10, 25, 0, Math.PI * 2);
@@ -573,7 +656,6 @@ function drawPlatform(p) {
         ctx.fillRect(p.x, p.y, p.w, p.h);
         ctx.fillStyle = top;
         ctx.fillRect(p.x, p.y, p.w, 8);
-        // Textura
         ctx.fillStyle = "rgba(0,0,0,0.1)";
         for (let i = 0; i < p.w; i += 30) {
             ctx.fillRect(p.x + i, p.y + 12, 2, p.h - 12);
@@ -596,7 +678,6 @@ function drawPlatform(p) {
         ctx.fillRect(p.x, p.y, p.w, p.h);
         ctx.fillStyle = "#f4d58d";
         ctx.fillRect(p.x, p.y, p.w, 5);
-        // Grama
         ctx.fillStyle = "#4a7c3a";
         for (let i = 0; i < p.w; i += 8) {
             ctx.fillRect(p.x + i, p.y - 3, 3, 3);
@@ -663,12 +744,10 @@ function drawCrystal(x, y, t) {
     ctx.save();
     ctx.translate(x + 10, cy + 10);
     ctx.rotate(Math.sin(t * 0.5) * 0.2);
-    // Brilho
     ctx.fillStyle = "rgba(100, 200, 255, 0.4)";
     ctx.beginPath();
     ctx.arc(0, 0, 16, 0, Math.PI * 2);
     ctx.fill();
-    // Cristal
     ctx.fillStyle = "#4fc3f7";
     ctx.beginPath();
     ctx.moveTo(0, -10);
@@ -697,7 +776,6 @@ function drawCrab(e) {
     const t = Date.now() / 100;
     const legMove = Math.sin(t) * 3;
 
-    // Pernas
     ctx.strokeStyle = "#c0392b";
     ctx.lineWidth = 2;
     for (let i = -1; i <= 1; i++) {
@@ -711,7 +789,6 @@ function drawCrab(e) {
         ctx.stroke();
     }
 
-    // Corpo
     ctx.fillStyle = "#e74c3c";
     ctx.beginPath();
     ctx.ellipse(cx, cy, e.w / 2, e.h / 2 - 2, 0, 0, Math.PI * 2);
@@ -721,14 +798,12 @@ function drawCrab(e) {
     ctx.ellipse(cx, cy + 4, e.w / 2 - 2, e.h / 2 - 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pinças
     ctx.fillStyle = "#e74c3c";
     ctx.beginPath();
     ctx.arc(cx - 18 * dir, cy - 4, 6, 0, Math.PI * 2);
     ctx.arc(cx + 18 * dir, cy - 4, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Olhos
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(cx - 6, cy - 8, 3, 0, Math.PI * 2);
@@ -745,7 +820,6 @@ function drawPortal(p) {
     const t = Date.now() / 300;
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
-    // Anel externo
     for (let i = 0; i < 3; i++) {
         ctx.strokeStyle = `rgba(150, 100, 255, ${0.8 - i * 0.2})`;
         ctx.lineWidth = 3;
@@ -753,7 +827,6 @@ function drawPortal(p) {
         ctx.ellipse(0, 0, p.w / 2 + i * 4, p.h / 2 + i * 4, 0, 0, Math.PI * 2);
         ctx.stroke();
     }
-    // Centro brilhante
     const grad = ctx.createRadialGradient(0, 0, 5, 0, 0, 30);
     grad.addColorStop(0, "rgba(255,255,255,0.9)");
     grad.addColorStop(0.5, "rgba(180,130,255,0.6)");
@@ -762,7 +835,6 @@ function drawPortal(p) {
     ctx.beginPath();
     ctx.arc(0, 0, 30 + Math.sin(t) * 3, 0, Math.PI * 2);
     ctx.fill();
-    // Texto
     ctx.fillStyle = "#fff";
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
@@ -773,15 +845,12 @@ function drawPortal(p) {
 function drawTreasure(tr) {
     const t = Date.now() / 400;
     const bob = Math.sin(t) * 2;
-    // Brilho
     ctx.fillStyle = `rgba(255, 215, 0, ${0.3 + Math.sin(t) * 0.15})`;
     ctx.beginPath();
     ctx.arc(tr.x + tr.w / 2, tr.y + tr.h / 2 + bob, 50, 0, Math.PI * 2);
     ctx.fill();
-    // Baú
     ctx.fillStyle = "#6b3410";
     ctx.fillRect(tr.x, tr.y + 20 + bob, tr.w, tr.h - 20);
-    // Tampa
     ctx.fillStyle = "#8b4513";
     ctx.beginPath();
     ctx.moveTo(tr.x, tr.y + 20 + bob);
@@ -790,14 +859,11 @@ function drawTreasure(tr) {
     ctx.lineTo(tr.x, tr.y + 30 + bob);
     ctx.closePath();
     ctx.fill();
-    // Detalhes dourados
     ctx.fillStyle = "#ffd700";
     ctx.fillRect(tr.x - 2, tr.y + 28 + bob, tr.w + 4, 4);
     ctx.fillRect(tr.x + tr.w / 2 - 5, tr.y + 35 + bob, 10, 10);
-    // Fechadura
     ctx.fillStyle = "#000";
     ctx.fillRect(tr.x + tr.w / 2 - 2, tr.y + 38 + bob, 4, 4);
-    // Estrelas brilhantes
     ctx.fillStyle = "#fff";
     for (let i = 0; i < 4; i++) {
         const a = t + i * 1.5;
@@ -808,7 +874,6 @@ function drawTreasure(tr) {
 }
 
 function drawPlayer() {
-    // Piscar quando invulnerável
     if (state.invulnerable > 0 && Math.floor(state.invulnerable / 5) % 2 === 0) return;
 
     const x = player.x;
@@ -822,56 +887,44 @@ function drawPlayer() {
     if (f < 0) ctx.scale(-1, 1);
     ctx.translate(-player.w / 2, -player.h / 2);
 
-    // Sombra
     ctx.fillStyle = "rgba(0,0,0,0.3)";
     ctx.beginPath();
     ctx.ellipse(player.w / 2, player.h + 2, 12, 3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Pernas
     const legOffset = walking ? Math.sin(frame * Math.PI / 2) * 4 : 0;
     ctx.fillStyle = "#3d2817";
     ctx.fillRect(6, 28, 6, 12 + legOffset);
     ctx.fillRect(16, 28, 6, 12 - legOffset);
 
-    // Botas
     ctx.fillStyle = "#1a0f08";
     ctx.fillRect(5, 38 + legOffset, 8, 3);
     ctx.fillRect(15, 38 - legOffset, 8, 3);
 
-    // Corpo (camisa caqui)
     ctx.fillStyle = "#c19a6b";
     ctx.fillRect(5, 16, 18, 14);
-    // Cinto
     ctx.fillStyle = "#5a3a1a";
     ctx.fillRect(5, 27, 18, 3);
     ctx.fillStyle = "#ffd700";
     ctx.fillRect(12, 27, 4, 3);
 
-    // Braços
     const armOffset = walking ? Math.sin(frame * Math.PI / 2) * 3 : 0;
     ctx.fillStyle = "#c19a6b";
     ctx.fillRect(1, 18 + armOffset, 5, 10);
     ctx.fillRect(22, 18 - armOffset, 5, 10);
-    // Mãos
     ctx.fillStyle = "#f4c8a0";
     ctx.fillRect(1, 26 + armOffset, 5, 3);
     ctx.fillRect(22, 26 - armOffset, 5, 3);
 
-    // Cabeça
     ctx.fillStyle = "#f4c8a0";
     ctx.fillRect(7, 4, 14, 13);
-    // Cabelo
     ctx.fillStyle = "#3d2817";
     ctx.fillRect(7, 4, 14, 4);
-    // Olhos
     ctx.fillStyle = "#000";
     ctx.fillRect(11, 10, 2, 2);
     ctx.fillRect(17, 10, 2, 2);
-    // Boca
     ctx.fillRect(13, 14, 4, 1);
 
-    // Chapéu de explorador
     ctx.fillStyle = "#8b5a2b";
     ctx.fillRect(4, 2, 20, 3);
     ctx.fillRect(8, -2, 12, 4);
@@ -884,12 +937,17 @@ function drawPlayer() {
 // =========================================================
 // LOOP PRINCIPAL
 // =========================================================
-function loop() {
-    update();
+function loop(now = performance.now()) {
+    const elapsed = Math.min(now - (state.lastTime || now), 50);
+    state.lastTime = now;
+    const dt = elapsed / TARGET_STEP_MS;
+
+    update(dt);
     draw();
     requestAnimationFrame(loop);
 }
 
 // Inicialização
 loadPhase(1);
-loop();
+state.lastTime = performance.now();
+requestAnimationFrame(loop);

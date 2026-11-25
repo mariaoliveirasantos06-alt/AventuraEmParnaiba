@@ -1,86 +1,205 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Aventura em Parnaíba - Em Busca do Tesouro</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
             background-color: #1a1a2e;
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
             overflow: hidden;
+            touch-action: none;
         }
         #game-container {
             position: relative;
-            width: 800px;
-            height: 500px;
+            width: min(100vw, calc(100dvh * 1.6));
+            aspect-ratio: 800 / 500;
+            max-width: 100vw;
+            max-height: 100dvh;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
-            border: 4px solid #4a3b2a;
+            border: 3px solid #4a3b2a;
             border-radius: 8px;
             overflow: hidden;
             background-color: #000;
         }
-        canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
         #hud {
-            position: absolute; top: 10px; left: 10px; right: 10px;
-            display: flex; justify-content: space-between;
-            pointer-events: none; z-index: 10;
+            position: absolute;
+            top: clamp(6px, 2%, 12px);
+            left: clamp(6px, 2%, 12px);
+            right: clamp(6px, 2%, 12px);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px;
+            pointer-events: none;
+            z-index: 10;
         }
         .hud-item {
-            background: rgba(0, 0, 0, 0.7);
-            padding: 8px 15px; border-radius: 20px;
-            font-size: 16px; font-weight: bold;
-            display: flex; align-items: center; gap: 8px;
+            background: rgba(0, 0, 0, 0.72);
+            padding: clamp(4px, 1vw, 8px) clamp(10px, 1.8vw, 15px);
+            border-radius: 20px;
+            font-size: clamp(11px, 2vw, 16px);
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
         }
-        .hud-item span { color: #ffd700; }
+        .hud-item span {
+            color: #ffd700;
+        }
+
+        /* Controles virtuais para celular e tablet */
+        #touch-controls {
+            position: absolute;
+            bottom: clamp(10px, 3%, 20px);
+            left: clamp(10px, 3%, 20px);
+            right: clamp(10px, 3%, 20px);
+            display: none;
+            justify-content: space-between;
+            align-items: flex-end;
+            z-index: 15;
+            pointer-events: none;
+        }
+        @media (hover: none) and (pointer: coarse), (max-width: 768px) {
+            #touch-controls {
+                display: flex;
+            }
+        }
+        .dpad {
+            display: flex;
+            gap: clamp(10px, 2.5vw, 18px);
+            pointer-events: auto;
+        }
+        .touch-btn {
+            width: clamp(52px, 11vw, 72px);
+            height: clamp(52px, 11vw, 72px);
+            border-radius: 50%;
+            background: rgba(20, 20, 35, 0.65);
+            border: 2px solid rgba(255, 215, 0, 0.55);
+            color: #fff;
+            font-size: clamp(20px, 4.5vw, 28px);
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(3px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            touch-action: none;
+            cursor: pointer;
+        }
+        .touch-btn.active, .touch-btn:active {
+            background: rgba(255, 215, 0, 0.35);
+            border-color: #ffd700;
+            transform: scale(0.94);
+        }
+        .jump-group {
+            pointer-events: auto;
+        }
+        .jump-btn {
+            background: rgba(76, 175, 80, 0.72);
+            border-color: rgba(180, 255, 180, 0.7);
+        }
+        .jump-btn.active, .jump-btn:active {
+            background: rgba(76, 175, 80, 0.95);
+        }
 
         #overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background: rgba(0, 0, 0, 0.88);
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            text-align: center; z-index: 20;
-            padding: 40px; transition: opacity 0.4s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 20;
+            padding: clamp(16px, 4%, 40px);
+            transition: opacity 0.4s ease;
             backdrop-filter: blur(4px);
+            overflow-y: auto;
         }
-        #overlay.hidden { display: none !important; }
+        #overlay.hidden {
+            display: none !important;
+        }
         #overlay-title {
-            font-size: 36px; color: #ffd700; margin-bottom: 20px;
+            font-size: clamp(20px, 4.5vw, 36px);
+            color: #ffd700;
+            margin-bottom: clamp(8px, 2%, 20px);
             text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
         }
         #overlay-text {
-            font-size: 18px; line-height: 1.6; margin-bottom: 30px;
-            color: #e0e0e0; max-width: 600px; white-space: pre-line;
+            font-size: clamp(13px, 2.2vw, 18px);
+            line-height: 1.5;
+            margin-bottom: clamp(12px, 3%, 25px);
+            color: #e0e0e0;
+            max-width: 600px;
+            white-space: pre-line;
         }
         #overlay-controls {
             background: rgba(255, 255, 255, 0.1);
-            padding: 15px 25px; border-radius: 10px;
-            margin-bottom: 25px; font-size: 15px; color: #aaa;
+            padding: clamp(10px, 2%, 15px) clamp(14px, 3%, 25px);
+            border-radius: 10px;
+            margin-bottom: clamp(14px, 3%, 25px);
+            font-size: clamp(12px, 1.9vw, 15px);
+            color: #ccc;
         }
-        #overlay-controls p { margin: 5px 0; }
+        #overlay-controls p {
+            margin: 5px 0;
+        }
         kbd {
-            background: #333; padding: 3px 8px; border-radius: 4px;
-            border: 1px solid #555; font-family: monospace; color: #fff;
+            background: #333;
+            padding: 2px 7px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            font-family: monospace;
+            color: #fff;
         }
         #start-btn {
             background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white; border: none; padding: 15px 40px;
-            font-size: 20px; font-weight: bold; border-radius: 30px;
-            cursor: pointer; transition: transform 0.1s, box-shadow 0.2s;
+            color: white;
+            border: none;
+            padding: clamp(10px, 2vw, 15px) clamp(24px, 5vw, 40px);
+            font-size: clamp(15px, 2.5vw, 20px);
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
             box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
         }
-        #start-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6); }
-        #start-btn:active { transform: translateY(1px); }
+        #start-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.6);
+        }
+        #start-btn:active {
+            transform: translateY(1px);
+        }
     </style>
 </head>
 <body>
@@ -94,12 +213,23 @@
 
         <canvas id="game" width="800" height="500"></canvas>
 
+        <div id="touch-controls" aria-label="Controles de toque">
+            <div class="dpad">
+                <button type="button" id="btn-left" class="touch-btn" aria-label="Mover para a esquerda">◀</button>
+                <button type="button" id="btn-right" class="touch-btn" aria-label="Mover para a direita">▶</button>
+            </div>
+            <div class="jump-group">
+                <button type="button" id="btn-jump" class="touch-btn jump-btn" aria-label="Pular">▲</button>
+            </div>
+        </div>
+
         <div id="overlay">
-            <h2 id="overlay-title">🏛️ Aventura em Parnaíba</h2>
-nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cristais, derrote caranguejos e supere os obstáculos das três fases.</p>            <p id="overlay-text">Bem-vindo, explorador! Embark em uma jor
+            <h2 id="overlay-title">🏛️ Aventura no Porto das Barcas</h2>
+            <p id="overlay-text">Bem-vindo, explorador! Embarque em uma jornada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cristais, derrote caranguejos e supere os obstáculos das três fases.</p>
             <div id="overlay-controls">
-                <p><kbd>←</kbd> <kbd>→</kbd> para mover</p>
-                <p><kbd>Espaço</kbd> ou <kbd>↑</kbd> para pular</p>
+                <p><kbd>←</kbd> <kbd>→</kbd> ou <kbd>A</kbd> <kbd>D</kbd> para mover</p>
+                <p><kbd>Espaço</kbd>, <kbd>↑</kbd> ou <kbd>W</kbd> para pular</p>
+                <p>No celular ou tablet: use os botões na tela</p>
             </div>
             <button id="start-btn">Iniciar Aventura</button>
         </div>
@@ -133,6 +263,7 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
             crystals: 0,
             totalCrystals: 0,
             keys: {},
+            touch: { left: false, right: false, jump: false },
             camera: { x: 0 },
             invulnerable: 0,
             gameOver: false,
@@ -281,7 +412,7 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
                 ],
                 portal: null,
                 treasure: { x: 3650, y: 380, w: 60, h: 80, found: false },
-                decorations: [ 
+                decorations: [
                     { type: "flag", x: 3550, y: 360 },
                     { type: "lighthouse", x: 200, y: 200 },
                     { type: "white_building", x: 400, y: 320 },
@@ -296,11 +427,58 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
             }
         ];
 
+        // Teclado (setas, WASD, Espaço)
         window.addEventListener('keydown', (e) => {
-            state.keys[e.key] = true;
-            if (["ArrowLeft", "ArrowRight", " ", "ArrowUp", "ArrowDown"].includes(e.key)) e.preventDefault();
+            const k = e.key.toLowerCase();
+            state.keys[k] = true;
+            if (["arrowleft", "arrowright", " ", "arrowup", "arrowdown", "w", "a", "s", "d"].includes(k)) {
+                e.preventDefault();
+            }
         });
-        window.addEventListener('keyup', (e) => { state.keys[e.key] = false; });
+        window.addEventListener('keyup', (e) => {
+            state.keys[e.key.toLowerCase()] = false;
+        });
+        window.addEventListener('blur', () => {
+            state.keys = {};
+            state.touch = { left: false, right: false, jump: false };
+            document.querySelectorAll('.touch-btn').forEach(b => b.classList.remove('active'));
+        });
+
+        // Controles touch (Pointer Events para celular, tablet e mouse)
+        function bindTouchButton(id, prop) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            const press = (e) => {
+                e.preventDefault();
+                state.touch[prop] = true;
+                btn.classList.add('active');
+            };
+            const release = (e) => {
+                e.preventDefault();
+                state.touch[prop] = false;
+                btn.classList.remove('active');
+            };
+            btn.addEventListener('pointerdown', press);
+            btn.addEventListener('pointerup', release);
+            btn.addEventListener('pointercancel', release);
+            btn.addEventListener('pointerleave', release);
+        }
+        bindTouchButton('btn-left', 'left');
+        bindTouchButton('btn-right', 'right');
+        bindTouchButton('btn-jump', 'jump');
+
+        // Suporte a Gamepad físico / Bluetooth
+        function pollGamepad() {
+            const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+            const gp = pads && pads[0];
+            if (!gp) return { left: false, right: false, jump: false };
+            const axisX = gp.axes[0] || 0;
+            return {
+                left: axisX < -0.35 || Boolean(gp.buttons[14] && gp.buttons[14].pressed),
+                right: axisX > 0.35 || Boolean(gp.buttons[15] && gp.buttons[15].pressed),
+                jump: Boolean(gp.buttons[0] && gp.buttons[0].pressed) || Boolean(gp.buttons[12] && gp.buttons[12].pressed)
+            };
+        }
 
         startBtn.addEventListener('click', () => {
             if (state.gameOver || state.won) resetGame();
@@ -342,14 +520,19 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
             state.guaraTime += 0.016;
 
             if (state.running) {
-                if (state.keys["ArrowRight"]) { player.vx = MOVE_SPEED; player.facing = 1; }
-                else if (state.keys["ArrowLeft"]) { player.vx = -MOVE_SPEED; player.facing = -1; }
+                const gp = pollGamepad();
+                const moveLeft = state.keys["arrowleft"] || state.keys["a"] || state.touch.left || gp.left;
+                const moveRight = state.keys["arrowright"] || state.keys["d"] || state.touch.right || gp.right;
+                const doJump = state.keys[" "] || state.keys["spacebar"] || state.keys["arrowup"] || state.keys["w"] || state.touch.jump || gp.jump;
+
+                if (moveRight) { player.vx = MOVE_SPEED; player.facing = 1; }
+                else if (moveLeft) { player.vx = -MOVE_SPEED; player.facing = -1; }
                 else {
                     player.vx *= FRICTION;
                     if (Math.abs(player.vx) < 0.1) player.vx = 0;
                 }
 
-                if ((state.keys[" "] || state.keys["Spacebar"]) && player.onGround) {
+                if (doJump && player.onGround) {
                     player.vy = JUMP_POWER; player.onGround = false;
                 }
 
@@ -416,24 +599,24 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
                 }
 
                 if (phase.treasure && !phase.treasure.found) {
-                    const hitbox = { 
-                        x: phase.treasure.x - 10, 
-                        y: phase.treasure.y - 10, 
-                        w: phase.treasure.w + 20, 
-                        h: phase.treasure.h + 20 
+                    const hitbox = {
+                        x: phase.treasure.x - 10,
+                        y: phase.treasure.y - 10,
+                        w: phase.treasure.w + 20,
+                        h: phase.treasure.h + 20
                     };
                     if (aabb(player, hitbox)) {
                         phase.treasure.found = true;
                         state.won = true;
                         state.running = false;
-                        
-                        for(let i = 0; i < 150; i++) {
+
+                        for (let i = 0; i < 150; i++) {
                             state.victoryParticles.push({
-                                x: player.x + player.w/2,
+                                x: player.x + player.w / 2,
                                 y: player.y,
                                 vx: (Math.random() - 0.5) * 15,
                                 vy: (Math.random() - 1) * 15 - 5,
-                                color: `hsl(${Math.random()*360}, 100%, 60%)`,
+                                color: `hsl(${Math.random() * 360}, 100%, 60%)`,
                                 size: Math.random() * 6 + 3,
                                 life: 1.0
                             });
@@ -474,7 +657,7 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
                         y: -20,
                         vx: (Math.random() - 0.5) * 3,
                         vy: Math.random() * 3 + 2,
-                        color: `hsl(${Math.random()*360}, 100%, 65%)`,
+                        color: `hsl(${Math.random() * 360}, 100%, 65%)`,
                         size: Math.random() * 5 + 3,
                         life: 1.0
                     });
@@ -504,20 +687,16 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
         }
 
         function draw() {
-            const phase = phases[state.phase - 1];
             const cam = state.camera.x;
 
-            if (state.phase === 1) {
-                drawBackgroundPorto(cam);
-            } else if (state.phase === 2) {
-                drawBackgroundDelta(cam);
-            } else {
-                drawBackgroundPedraDoSal(cam);
-            }
+            if (state.phase === 1) drawBackgroundPorto(cam);
+            else if (state.phase === 2) drawBackgroundDelta(cam);
+            else drawBackgroundPedraDoSal(cam);
 
             ctx.save();
             ctx.translate(-cam, 0);
 
+            const phase = phases[state.phase - 1];
             for (const d of phase.decorations) {
                 if (d.type === "building_yellow") drawBuildingYellow(d.x, d.y);
                 else if (d.type === "building_pink") drawBuildingPink(d.x, d.y);
@@ -543,9 +722,7 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
             drawPlayer();
             ctx.restore();
 
-            if (state.phase === 2) {
-                drawGuaras(cam);
-            }
+            if (state.phase === 2) drawGuaras(cam);
 
             if (state.won) {
                 for (let p of state.victoryParticles) {
@@ -557,6 +734,21 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
                 }
                 ctx.globalAlpha = 1.0;
             }
+        }
+
+        function drawCloud(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, 22, 0, Math.PI * 2);
+            ctx.arc(x + 20, y - 8, 26, 0, Math.PI * 2);
+            ctx.arc(x + 42, y, 20, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawCloudThin(x, y) {
+            ctx.beginPath();
+            ctx.ellipse(x, y, 36, 12, 0, 0, Math.PI * 2);
+            ctx.ellipse(x + 25, y - 4, 28, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
         }
 
         function drawBackgroundPorto(cam) {
@@ -612,7 +804,7 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
 
             ctx.fillStyle = "#1a3a5c";
             ctx.fillRect(0, 380, W, 120);
-            
+
             ctx.strokeStyle = "rgba(100, 150, 200, 0.4)";
             ctx.lineWidth = 2;
             for (let row = 0; row < 6; row++) {
@@ -631,6 +823,30 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
                 const wy = 400 + (i % 5) * 15;
                 ctx.fillRect(wx, wy, 40, 1);
             }
+        }
+
+        function drawBackgroundPedraDoSal(cam) {
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+            skyGrad.addColorStop(0, "#87CEEB");
+            skyGrad.addColorStop(0.7, "#B0E0E6");
+            skyGrad.addColorStop(1, "#E0F6FF");
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.fillStyle = "rgba(255, 255, 210, 0.9)";
+            ctx.beginPath();
+            ctx.arc(W - 110, 75, 45, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+            for (let i = 0; i < 5; i++) {
+                const cx = ((i * 360 - cam * 0.2) % (W + 300)) - 150;
+                const cy = 55 + (i % 3) * 22;
+                drawCloud(cx, cy);
+            }
+
+            ctx.fillStyle = "#4682B4";
+            ctx.fillRect(0, 390, W, 110);
         }
 
         function drawDunes(cam) {
@@ -674,32 +890,21 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
         function drawGuaras(cam) {
             const t = state.guaraTime;
             const guaras = [
-                { x: 100, y: 150, phase: 0 },
-                { x: 200, y: 180, phase: 0.3 },
-                { x: 300, y: 140, phase: 0.6 },
-                { x: 450, y: 200, phase: 0.2 },
-                { x: 550, y: 160, phase: 0.8 },
-                { x: 700, y: 190, phase: 0.4 },
-                { x: 850, y: 150, phase: 0.7 },
-                { x: 1000, y: 170, phase: 0.1 },
-                { x: 1150, y: 140, phase: 0.5 },
-                { x: 1300, y: 200, phase: 0.9 },
-                { x: 1450, y: 160, phase: 0.3 },
-                { x: 1600, y: 180, phase: 0.6 },
-                { x: 1800, y: 150, phase: 0.2 },
-                { x: 2000, y: 190, phase: 0.7 },
-                { x: 2200, y: 160, phase: 0.4 },
-                { x: 2400, y: 170, phase: 0.8 },
-                { x: 2600, y: 140, phase: 0.1 },
-                { x: 2800, y: 200, phase: 0.5 },
-                { x: 3000, y: 160, phase: 0.9 },
-                { x: 3200, y: 180, phase: 0.3 }
+                { x: 100, y: 150, phase: 0 }, { x: 200, y: 180, phase: 0.3 },
+                { x: 300, y: 140, phase: 0.6 }, { x: 450, y: 200, phase: 0.2 },
+                { x: 550, y: 160, phase: 0.8 }, { x: 700, y: 190, phase: 0.4 },
+                { x: 850, y: 150, phase: 0.7 }, { x: 1000, y: 170, phase: 0.1 },
+                { x: 1150, y: 140, phase: 0.5 }, { x: 1300, y: 200, phase: 0.9 },
+                { x: 1450, y: 160, phase: 0.3 }, { x: 1600, y: 180, phase: 0.6 },
+                { x: 1800, y: 150, phase: 0.2 }, { x: 2000, y: 190, phase: 0.7 },
+                { x: 2200, y: 160, phase: 0.4 }, { x: 2400, y: 170, phase: 0.8 },
+                { x: 2600, y: 140, phase: 0.1 }, { x: 2800, y: 200, phase: 0.5 },
+                { x: 3000, y: 160, phase: 0.9 }, { x: 3200, y: 180, phase: 0.3 }
             ];
 
             for (const g of guaras) {
                 const flyX = ((g.x + t * 40 + g.phase * 100) % (phases[1].width + 200)) - 100;
                 const flyY = g.y + Math.sin(t * 2 + g.phase * 10) * 15;
-                
                 const screenX = flyX - cam;
                 if (screenX > -50 && screenX < W + 50) {
                     drawGuara(screenX, flyY, t, g.phase);
@@ -709,447 +914,203 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
 
         function drawGuara(x, y, t, phase) {
             const wingFlap = Math.sin(t * 8 + phase * 10) * 0.4;
-            
             ctx.save();
             ctx.translate(x, y);
-            
+
             ctx.fillStyle = "#DC143C";
             ctx.beginPath();
             ctx.ellipse(0, 0, 12, 6, 0, 0, Math.PI * 2);
             ctx.fill();
-            
+
             ctx.fillStyle = "#B22222";
             ctx.save();
             ctx.rotate(-0.3 + wingFlap);
             ctx.beginPath();
-            ctx.ellipse(-8, -5, 15, 5, -0.5, 0, Math.PI * 2);
+            ctx.ellipse(-2, -3, 8, 4, -0.4, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
-            
-            ctx.save();
-            ctx.rotate(0.3 - wingFlap);
-            ctx.beginPath();
-            ctx.ellipse(8, -5, 15, 5, 0.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-            
+
             ctx.fillStyle = "#DC143C";
             ctx.beginPath();
-            ctx.arc(10, -2, 5, 0, Math.PI * 2);
+            ctx.arc(11, -3, 4.5, 0, Math.PI * 2);
             ctx.fill();
-            
-            ctx.fillStyle = "#8B0000";
+
+            ctx.fillStyle = "#333";
             ctx.beginPath();
-            ctx.moveTo(14, -2);
-            ctx.quadraticCurveTo(22, 0, 20, 4);
-            ctx.quadraticCurveTo(18, 2, 14, 0);
+            ctx.moveTo(15, -4);
+            ctx.lineTo(24, -1);
+            ctx.lineTo(15, -1);
             ctx.closePath();
             ctx.fill();
-            
-            ctx.fillStyle = "#000";
-            ctx.beginPath();
-            ctx.arc(11, -3, 1, 0, Math.PI * 2);
-            ctx.fill();
-            
+
             ctx.restore();
-        }
-
-        function drawBackgroundPedraDoSal(cam) {
-            // Céu azul claro
-            const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
-            skyGrad.addColorStop(0, "#87CEEB");
-            skyGrad.addColorStop(0.7, "#B0E0E6");
-            skyGrad.addColorStop(1, "#E0F6FF");
-            ctx.fillStyle = skyGrad;
-            ctx.fillRect(0, 0, W, H);
-
-            // Sol
-            ctx.fillStyle = "rgba(255, 255, 200, 0.9)";
-            ctx.beginPath();
-            ctx.arc(W - 120, 80, 50, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Nuvens
-            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-            for (let i = 0; i < 6; i++) {
-                const cx = ((i * 350 - cam * 0.2) % (W + 300)) - 150;
-                const cy = 50 + (i % 3) * 25;
-                drawCloud(cx, cy);
-            }
-
-            // Mar azul ao fundo
-            ctx.fillStyle = "#4682B4";
-            ctx.fillRect(0, 380, W, 120);
-
-            // Ondas do mar
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
-            ctx.lineWidth = 2;
-            for (let row = 0; row < 5; row++) {
-                ctx.beginPath();
-                for (let x = 0; x < W; x += 5) {
-                    const waveY = 400 + row * 20 + Math.sin((x + cam * 0.5 + state.guaraTime * 30) * 0.05) * 3;
-                    if (x === 0) ctx.moveTo(x, waveY);
-                    else ctx.lineTo(x, waveY);
-                }
-                ctx.stroke();
-            }
-
-            // Espuma das ondas
-            ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-            for (let i = 0; i < 20; i++) {
-                const wx = ((i * 100 - cam * 0.6) % (W + 100));
-                const wy = 410 + (i % 4) * 15;
-                ctx.fillRect(wx, wy, 60, 2);
-            }
-        }
-
-        function drawCloud(x, y) {
-            ctx.beginPath();
-            ctx.arc(x, y, 20, 0, Math.PI * 2);
-            ctx.arc(x + 25, y - 8, 25, 0, Math.PI * 2);
-            ctx.arc(x + 50, y, 20, 0, Math.PI * 2);
-            ctx.arc(x + 25, y + 10, 22, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        function drawCloudThin(x, y) {
-            ctx.beginPath();
-            ctx.ellipse(x, y, 40, 12, 0, 0, Math.PI * 2);
-            ctx.ellipse(x + 30, y - 5, 30, 10, 0, 0, Math.PI * 2);
-            ctx.ellipse(x - 25, y + 3, 25, 8, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Farol branco alto
-        function drawLighthouse(x, y) {
-            // Base
-            ctx.fillStyle = "#F0F0F0";
-            ctx.fillRect(x, y, 30, 180);
-            
-            // Topo do farol
-            ctx.fillStyle = "#FFFFFF";
-            ctx.fillRect(x - 5, y - 20, 40, 20);
-            
-            // Lanterna
-            ctx.fillStyle = "#FFD700";
-            ctx.fillRect(x + 5, y - 15, 20, 10);
-            
-            // Telhado
-            ctx.fillStyle = "#C0392B";
-            ctx.beginPath();
-            ctx.moveTo(x - 10, y - 20);
-            ctx.lineTo(x + 15, y - 35);
-            ctx.lineTo(x + 40, y - 20);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Janelas
-            ctx.fillStyle = "#87CEEB";
-            for (let i = 0; i < 4; i++) {
-                ctx.fillRect(x + 10, y + 20 + i * 40, 10, 15);
-            }
-        }
-
-        // Edifício branco curvo
-        function drawWhiteBuilding(x, y) {
-            // Corpo principal curvo
-            ctx.fillStyle = "#FFFFFF";
-            ctx.beginPath();
-            ctx.moveTo(x, y + 80);
-            ctx.quadraticCurveTo(x + 50, y - 20, x + 100, y + 80);
-            ctx.lineTo(x + 100, y + 100);
-            ctx.lineTo(x, y + 100);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Telhado
-            ctx.fillStyle = "#E0E0E0";
-            ctx.beginPath();
-            ctx.moveTo(x - 5, y + 80);
-            ctx.quadraticCurveTo(x + 50, y - 25, x + 105, y + 80);
-            ctx.lineTo(x + 100, y + 80);
-            ctx.quadraticCurveTo(x + 50, y - 20, x, y + 80);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Porta
-            ctx.fillStyle = "#8B4513";
-            ctx.fillRect(x + 40, y + 60, 20, 40);
-        }
-
-        // Grupo de rochas grandes
-        function drawBigRockCluster(x, y) {
-            const rocks = [
-                { x: 0, y: 0, w: 60, h: 50 },
-                { x: 40, y: -20, w: 50, h: 45 },
-                { x: -30, y: 10, w: 55, h: 40 },
-                { x: 70, y: 15, w: 45, h: 35 }
-            ];
-            
-            for (const r of rocks) {
-                ctx.fillStyle = "#8B7355";
-                ctx.beginPath();
-                ctx.ellipse(x + r.x + r.w/2, y + r.y + r.h/2, r.w/2, r.h/2, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Sombra
-                ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-                ctx.beginPath();
-                ctx.ellipse(x + r.x + r.w/2, y + r.y + r.h, r.w/2, 5, 0, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // Pessoa na praia
-        function drawBeachPerson(x, y) {
-            // Cabeça
-            ctx.fillStyle = "#F4C8A0";
-            ctx.beginPath();
-            ctx.arc(x, y - 20, 6, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Corpo
-            ctx.fillStyle = "#FF6347";
-            ctx.fillRect(x - 5, y - 14, 10, 15);
-            
-            // Pernas
-            ctx.fillStyle = "#F4C8A0";
-            ctx.fillRect(x - 4, y + 1, 3, 10);
-            ctx.fillRect(x + 1, y + 1, 3, 10);
         }
 
         function drawBuildingYellow(x, y) {
             ctx.fillStyle = "#F4D03F";
-            ctx.fillRect(x, y, 120, 140);
-            ctx.fillStyle = "#C0392B";
-            ctx.beginPath();
-            ctx.moveTo(x - 10, y);
-            ctx.lineTo(x + 60, y - 30);
-            ctx.lineTo(x + 130, y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = "#2980B9";
-            for (let i = 0; i < 4; i++) {
-                const wx = x + 15 + i * 28;
-                const wy = y + 30;
-                ctx.beginPath();
-                ctx.arc(wx + 10, wy + 10, 10, Math.PI, 0);
-                ctx.fillRect(wx, wy + 10, 20, 20);
-                ctx.fill();
+            ctx.fillRect(x, y, 110, 180);
+            ctx.fillStyle = "#D4AC0D";
+            ctx.fillRect(x, y, 110, 14);
+            ctx.fillStyle = "#2C3E50";
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    ctx.fillRect(x + 16 + c * 30, y + 28 + r * 42, 18, 24);
+                }
             }
-            ctx.fillStyle = "#8B4513";
-            ctx.fillRect(x + 50, y + 90, 20, 50);
         }
 
         function drawBuildingPink(x, y) {
-            ctx.fillStyle = "#FFB6C1";
-            ctx.fillRect(x, y, 80, 100);
+            ctx.fillStyle = "#F1948A";
+            ctx.fillRect(x, y, 90, 140);
             ctx.fillStyle = "#C0392B";
-            ctx.beginPath();
-            ctx.moveTo(x - 5, y);
-            ctx.lineTo(x + 40, y - 25);
-            ctx.lineTo(x + 85, y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = "#2980B9";
-            ctx.fillRect(x + 15, y + 20, 20, 25);
-            ctx.fillRect(x + 45, y + 20, 20, 25);
+            ctx.fillRect(x, y, 90, 12);
+            ctx.fillStyle = "#2C3E50";
+            for (let r = 0; r < 2; r++) {
+                for (let c = 0; c < 2; c++) {
+                    ctx.fillRect(x + 18 + c * 34, y + 25 + r * 45, 20, 26);
+                }
+            }
         }
 
         function drawBuildingOrange(x, y) {
-            ctx.fillStyle = "#E67E22";
-            ctx.fillRect(x, y, 100, 120);
-            ctx.fillStyle = "#C0392B";
-            ctx.beginPath();
-            ctx.moveTo(x - 8, y);
-            ctx.lineTo(x + 50, y - 28);
-            ctx.lineTo(x + 108, y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = "#2980B9";
-            for (let i = 0; i < 3; i++) {
-                ctx.fillRect(x + 15 + i * 30, y + 25, 18, 22);
+            ctx.fillStyle = "#EB984E";
+            ctx.fillRect(x, y, 100, 160);
+            ctx.fillStyle = "#BA4A00";
+            ctx.fillRect(x, y, 100, 12);
+            ctx.fillStyle = "#2C3E50";
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 2; c++) {
+                    ctx.fillRect(x + 20 + c * 36, y + 24 + r * 40, 22, 22);
+                }
             }
         }
 
         function drawCrane(x, y) {
-            ctx.fillStyle = "#8B4513";
-            ctx.fillRect(x, y + 40, 30, 60);
-            ctx.strokeStyle = "#A0522D";
-            ctx.lineWidth = 6;
+            ctx.strokeStyle = "#5D4037";
+            ctx.lineWidth = 5;
             ctx.beginPath();
-            ctx.moveTo(x + 15, y + 40);
-            ctx.lineTo(x + 50, y - 20);
+            ctx.moveTo(x, y + 120);
+            ctx.lineTo(x, y);
+            ctx.lineTo(x + 55, y - 20);
             ctx.stroke();
-            ctx.strokeStyle = "#5a3a1a";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x + 50, y - 20);
-            ctx.lineTo(x + 50, y + 20);
-            ctx.stroke();
-            ctx.fillStyle = "#696969";
-            ctx.beginPath();
-            ctx.arc(x + 50, y + 25, 5, 0, Math.PI * 2);
-            ctx.fill();
         }
 
         function drawPalm(x, y) {
-            ctx.fillStyle = "#8B4513";
-            ctx.fillRect(x + 8, y, 8, 80);
-            ctx.fillStyle = "#228B22";
-            for (let i = 0; i < 6; i++) {
-                const angle = (i * Math.PI) / 3;
-                ctx.save();
-                ctx.translate(x + 12, y);
-                ctx.rotate(angle);
+            ctx.strokeStyle = "#795548";
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(x, y + 80);
+            ctx.quadraticCurveTo(x + 8, y + 40, x, y);
+            ctx.stroke();
+            ctx.fillStyle = "#2E7D32";
+            for (let a = -2.2; a <= 0.6; a += 0.55) {
                 ctx.beginPath();
-                ctx.ellipse(0, -20, 8, 25, 0, 0, Math.PI * 2);
+                ctx.ellipse(x + Math.cos(a) * 18, y + Math.sin(a) * 14, 18, 6, a, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.restore();
             }
         }
 
         function drawMangrove(x, y) {
-            ctx.strokeStyle = "#5a3a1a";
-            ctx.lineWidth = 3;
-            for (let i = -2; i <= 2; i++) {
-                ctx.beginPath();
-                ctx.moveTo(x + i * 8, y + 60);
-                ctx.quadraticCurveTo(x + i * 12, y + 30, x + i * 6, y);
-                ctx.stroke();
-            }
-            ctx.fillStyle = "#2d5a2d";
+            ctx.fillStyle = "#3B6E3C";
             ctx.beginPath();
-            ctx.arc(x, y - 10, 25, 0, Math.PI * 2);
-            ctx.arc(x - 15, y, 20, 0, Math.PI * 2);
-            ctx.arc(x + 15, y, 20, 0, Math.PI * 2);
+            ctx.arc(x, y, 28, 0, Math.PI * 2);
+            ctx.arc(x + 22, y + 8, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#5D4037";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x, y + 15);
+            ctx.lineTo(x - 10, y + 60);
+            ctx.moveTo(x, y + 15);
+            ctx.lineTo(x + 12, y + 60);
+            ctx.stroke();
+        }
+
+        function drawFlag(x, y) {
+            ctx.strokeStyle = "#DDD";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(x, y + 100);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.fillStyle = "#FFD700";
+            ctx.fillRect(x, y, 36, 22);
+        }
+
+        function drawLighthouse(x, y) {
+            ctx.fillStyle = "#FFF";
+            ctx.beginPath();
+            ctx.moveTo(x - 18, y + 260);
+            ctx.lineTo(x + 18, y + 260);
+            ctx.lineTo(x + 10, y + 40);
+            ctx.lineTo(x - 10, y + 40);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = "#C0392B";
+            ctx.fillRect(x - 13, y + 110, 26, 28);
+            ctx.fillRect(x - 15, y + 180, 30, 28);
+            ctx.fillStyle = "#FFD700";
+            ctx.fillRect(x - 10, y + 20, 20, 20);
+        }
+
+        function drawWhiteBuilding(x, y) {
+            ctx.fillStyle = "#FAFAFA";
+            ctx.fillRect(x, y, 90, 140);
+            ctx.fillStyle = "#D35400";
+            ctx.fillRect(x - 4, y - 10, 98, 12);
+        }
+
+        function drawBigRockCluster(x, y) {
+            ctx.fillStyle = "#7F8C8D";
+            ctx.beginPath();
+            ctx.arc(x, y + 60, 32, 0, Math.PI * 2);
+            ctx.arc(x + 28, y + 65, 24, 0, Math.PI * 2);
             ctx.fill();
         }
 
+        function drawBeachPerson(x, y) {
+            ctx.fillStyle = "#F39C12";
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(x - 4, y + 6, 8, 14);
+        }
+
         function drawPlatform(p) {
-            if (p.type === "stone") {
-                ctx.fillStyle = "#808080";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#A9A9A9";
-                ctx.fillRect(p.x, p.y, p.w, 8);
-                ctx.fillStyle = "rgba(0,0,0,0.15)";
-                for (let i = 0; i < p.w; i += 25) {
-                    for (let j = 0; j < p.h - 8; j += 20) {
-                        ctx.fillRect(p.x + i, p.y + 8 + j, 2, 2);
-                    }
-                }
-            } else if (p.type === "brick") {
-                ctx.fillStyle = "#A0522D";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#CD853F";
-                ctx.fillRect(p.x, p.y, p.w, 5);
-                ctx.strokeStyle = "#8B4513";
-                ctx.lineWidth = 1;
-                for (let i = 0; i < p.w; i += 20) {
-                    ctx.beginPath();
-                    ctx.moveTo(p.x + i, p.y);
-                    ctx.lineTo(p.x + i, p.y + p.h);
-                    ctx.stroke();
-                }
-            } else if (p.type === "sand") {
-                ctx.fillStyle = "#D4A857";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#F4D58D";
-                ctx.fillRect(p.x, p.y, p.w, 8);
-                ctx.fillStyle = "rgba(0,0,0,0.1)";
-                for (let i = 0; i < p.w; i += 30) ctx.fillRect(p.x + i, p.y + 12, 2, p.h - 12);
-            } else if (p.type === "island") {
-                ctx.fillStyle = "#D4A857";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#F4D58D";
-                ctx.fillRect(p.x, p.y, p.w, 5);
-                ctx.fillStyle = "#4a7c3a";
-                for (let i = 0; i < p.w; i += 8) ctx.fillRect(p.x + i, p.y - 3, 3, 3);
-            } else if (p.type === "rock") {
-                ctx.fillStyle = "#7a7a7a";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#9a9a9a";
-                ctx.fillRect(p.x, p.y, p.w, 4);
-                ctx.fillStyle = "#5a5a5a";
-                ctx.fillRect(p.x, p.y + p.h - 3, p.w, 3);
-            } else if (p.type === "beach") {
-                // Areia clara da praia
-                ctx.fillStyle = "#E8D5B7";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#F5E6D3";
-                ctx.fillRect(p.x, p.y, p.w, 8);
-                // Textura de areia
-                ctx.fillStyle = "rgba(200, 180, 150, 0.3)";
-                for (let i = 0; i < p.w; i += 15) {
-                    ctx.fillRect(p.x + i, p.y + 10, 1, p.h - 10);
-                }
-            } else if (p.type === "bigrock") {
-                // Rochas grandes marrons
-                ctx.fillStyle = "#8B7355";
-                ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#A0826D";
-                ctx.fillRect(p.x, p.y, p.w, 5);
-                // Sombras nas rochas
-                ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-                ctx.fillRect(p.x, p.y + p.h - 5, p.w, 5);
-            }
+            const colors = {
+                stone: "#6D5D4E",
+                brick: "#A0522D",
+                sand: "#E6C280",
+                island: "#8D6E63",
+                beach: "#F4D03F",
+                bigrock: "#5D6D7E"
+            };
+            ctx.fillStyle = colors[p.type] || "#795548";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = "rgba(255,255,255,0.18)";
+            ctx.fillRect(p.x, p.y, p.w, 4);
         }
 
         function drawObstacle(o) {
             if (o.type === "crate") {
-                ctx.fillStyle = "#8B5A2B";
+                ctx.fillStyle = "#B87333";
                 ctx.fillRect(o.x, o.y, o.w, o.h);
-                ctx.strokeStyle = "#3d2008";
-                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#5D3A1A";
+                ctx.lineWidth = 3;
                 ctx.strokeRect(o.x, o.y, o.w, o.h);
+            } else {
+                ctx.fillStyle = "#566573";
                 ctx.beginPath();
-                ctx.moveTo(o.x, o.y);
-                ctx.lineTo(o.x + o.w, o.y + o.h);
-                ctx.moveTo(o.x + o.w, o.y);
-                ctx.lineTo(o.x, o.y + o.h);
-                ctx.stroke();
-            } else if (o.type === "rock") {
-                ctx.fillStyle = "#6a6a6a";
-                ctx.beginPath();
-                ctx.moveTo(o.x, o.y + o.h);
-                ctx.lineTo(o.x + 5, o.y + 10);
-                ctx.lineTo(o.x + o.w / 2, o.y);
-                ctx.lineTo(o.x + o.w - 5, o.y + 10);
-                ctx.lineTo(o.x + o.w, o.y + o.h);
-                ctx.closePath();
-                ctx.fill();
-                ctx.fillStyle = "#8a8a8a";
-                ctx.beginPath();
-                ctx.moveTo(o.x + 5, o.y + 10);
-                ctx.lineTo(o.x + o.w / 2, o.y);
-                ctx.lineTo(o.x + o.w - 5, o.y + 10);
-                ctx.closePath();
-                ctx.fill();
-            } else if (o.type === "boulder") {
-                // Pedras grandes arredondadas
-                ctx.fillStyle = "#8B7355";
-                ctx.beginPath();
-                ctx.ellipse(o.x + o.w/2, o.y + o.h/2, o.w/2, o.h/2, 0, 0, Math.PI * 2);
-                ctx.fill();
-                // Brilho
-                ctx.fillStyle = "#A0826D";
-                ctx.beginPath();
-                ctx.ellipse(o.x + o.w/2 - 5, o.y + o.h/2 - 5, o.w/3, o.h/3, 0, 0, Math.PI * 2);
+                ctx.arc(o.x + o.w / 2, o.y + o.h / 2, o.w / 2, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
 
         function drawCrystal(x, y, t) {
-            const bob = Math.sin(t + x) * 3;
-            const cy = y + bob;
+            const bob = Math.sin(t + x * 0.05) * 4;
             ctx.save();
-            ctx.translate(x + 10, cy + 10);
-            ctx.rotate(Math.sin(t * 0.5) * 0.2);
-            ctx.fillStyle = "rgba(100, 200, 255, 0.4)";
-            ctx.beginPath();
-            ctx.arc(0, 0, 16, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#4fc3f7";
+            ctx.translate(x + 10, y + 10 + bob);
+            ctx.fillStyle = "#00E5FF";
             ctx.beginPath();
             ctx.moveTo(0, -10);
             ctx.lineTo(8, 0);
@@ -1157,208 +1118,75 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
             ctx.lineTo(-8, 0);
             ctx.closePath();
             ctx.fill();
-            ctx.fillStyle = "#b3e5fc";
-            ctx.beginPath();
-            ctx.moveTo(0, -10);
-            ctx.lineTo(8, 0);
-            ctx.lineTo(0, 0);
-            ctx.closePath();
-            ctx.fill();
-            ctx.strokeStyle = "#0277bd";
-            ctx.lineWidth = 1;
-            ctx.stroke();
             ctx.restore();
         }
 
         function drawCrab(e) {
-            const dir = e.vx > 0 ? 1 : -1;
-            const cx = e.x + e.w / 2;
-            const cy = e.y + e.h / 2;
-            const t = Date.now() / 100;
-            const legMove = Math.sin(t) * 3;
-
-            ctx.strokeStyle = "#c0392b";
-            ctx.lineWidth = 2;
-            for (let i = -1; i <= 1; i++) {
-                ctx.beginPath();
-                ctx.moveTo(cx - 12, cy + 4);
-                ctx.lineTo(cx - 18, cy + 10 + (i === 0 ? legMove : -legMove));
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(cx + 12, cy + 4);
-                ctx.lineTo(cx + 18, cy + 10 + (i === 0 ? -legMove : legMove));
-                ctx.stroke();
-            }
-
-            ctx.fillStyle = "#e74c3c";
+            ctx.save();
+            ctx.translate(e.x, e.y);
+            ctx.fillStyle = "#E74C3C";
             ctx.beginPath();
-            ctx.ellipse(cx, cy, e.w / 2, e.h / 2 - 2, 0, 0, Math.PI * 2);
+            ctx.ellipse(e.w / 2, e.h / 2 + 3, 15, 10, 0, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "#c0392b";
-            ctx.beginPath();
-            ctx.ellipse(cx, cy + 4, e.w / 2 - 2, e.h / 2 - 6, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = "#e74c3c";
-            ctx.beginPath();
-            ctx.arc(cx - 18 * dir, cy - 4, 6, 0, Math.PI * 2);
-            ctx.arc(cx + 18 * dir, cy - 4, 6, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = "#fff";
-            ctx.beginPath();
-            ctx.arc(cx - 6, cy - 8, 3, 0, Math.PI * 2);
-            ctx.arc(cx + 6, cy - 8, 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#000";
-            ctx.beginPath();
-            ctx.arc(cx - 6 + dir, cy - 8, 1.5, 0, Math.PI * 2);
-            ctx.arc(cx + 6 + dir, cy - 8, 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.fillStyle = "#111";
+            ctx.fillRect(10, 6, 4, 4);
+            ctx.fillRect(22, 6, 4, 4);
+            ctx.restore();
         }
 
         function drawPortal(p) {
-            const t = Date.now() / 300;
             ctx.save();
-            ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
-            for (let i = 0; i < 3; i++) {
-                ctx.strokeStyle = `rgba(150, 100, 255, ${0.8 - i * 0.2})`;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.ellipse(0, 0, p.w / 2 + i * 4, p.h / 2 + i * 4, 0, 0, Math.PI * 2);
-                ctx.stroke();
-            }
-            const grad = ctx.createRadialGradient(0, 0, 5, 0, 0, 30);
-            grad.addColorStop(0, "rgba(255,255,255,0.9)");
-            grad.addColorStop(0.5, "rgba(180,130,255,0.6)");
-            grad.addColorStop(1, "rgba(100,50,200,0)");
+            const grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+            grad.addColorStop(0, "#7B1FA2");
+            grad.addColorStop(1, "#00E5FF");
             ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(0, 0, 30 + Math.sin(t) * 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 12px sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillText("→", 0, 5);
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.strokeStyle = "#FFD700";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(p.x, p.y, p.w, p.h);
             ctx.restore();
         }
 
         function drawTreasure(tr, t) {
-            const bob = Math.sin(t) * 2;
-            
-            if (tr.found) {
-                ctx.fillStyle = `rgba(255, 215, 0, ${0.5 + Math.sin(Date.now()/150)*0.3})`;
-                ctx.beginPath();
-                ctx.arc(tr.x + tr.w / 2, tr.y + tr.h / 2, 90, 0, Math.PI * 2);
-                ctx.fill();
-                
-                const lightGrad = ctx.createRadialGradient(tr.x + tr.w/2, tr.y + 20, 5, tr.x + tr.w/2, tr.y - 20, 60);
-                lightGrad.addColorStop(0, "rgba(255, 255, 200, 0.9)");
-                lightGrad.addColorStop(1, "rgba(255, 215, 0, 0)");
-                ctx.fillStyle = lightGrad;
-                ctx.beginPath();
-                ctx.arc(tr.x + tr.w/2, tr.y + 10, 60, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                ctx.fillStyle = `rgba(255, 215, 0, ${0.3 + Math.sin(t) * 0.15})`;
-                ctx.beginPath();
-                ctx.arc(tr.x + tr.w / 2, tr.y + tr.h / 2 + bob, 50, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            ctx.fillStyle = "#6b3410";
-            ctx.fillRect(tr.x, tr.y + 20 + bob, tr.w, tr.h - 20);
-            
-            ctx.fillStyle = "#8b4513";
+            const glow = 0.6 + Math.sin(t * 2) * 0.3;
+            ctx.save();
+            ctx.fillStyle = "#8D4E2A";
+            ctx.fillRect(tr.x, tr.y + 25, tr.w, tr.h - 25);
+            ctx.fillStyle = "#FFD700";
+            ctx.fillRect(tr.x - 2, tr.y + 20, tr.w + 4, 12);
+            ctx.fillStyle = `rgba(255, 215, 0, ${glow})`;
             ctx.beginPath();
-            if (tr.found) {
-                ctx.moveTo(tr.x, tr.y + 20 + bob);
-                ctx.quadraticCurveTo(tr.x + tr.w / 2, tr.y - 25 + bob, tr.x + tr.w, tr.y + 20 + bob);
-            } else {
-                ctx.moveTo(tr.x, tr.y + 20 + bob);
-                ctx.quadraticCurveTo(tr.x + tr.w / 2, tr.y - 10 + bob, tr.x + tr.w, tr.y + 20 + bob);
-            }
-            ctx.lineTo(tr.x + tr.w, tr.y + 30 + bob);
-            ctx.lineTo(tr.x, tr.y + 30 + bob);
-            ctx.closePath();
+            ctx.arc(tr.x + tr.w / 2, tr.y + 10, 18, 0, Math.PI * 2);
             ctx.fill();
-            
-            ctx.fillStyle = "#ffd700";
-            ctx.fillRect(tr.x - 2, tr.y + 28 + bob, tr.w + 4, 4);
-            ctx.fillRect(tr.x + tr.w / 2 - 5, tr.y + 35 + bob, 10, 10);
-            ctx.fillStyle = "#000";
-            ctx.fillRect(tr.x + tr.w / 2 - 2, tr.y + 38 + bob, 4, 4);
-            
-            ctx.fillStyle = "#fff";
-            for (let i = 0; i < 5; i++) {
-                const a = (Date.now() / 500) + i * 1.2;
-                const sx = tr.x + tr.w / 2 + Math.cos(a) * (tr.found ? 50 : 40);
-                const sy = tr.y + tr.h / 2 + Math.sin(a) * 40 + bob;
-                ctx.fillRect(sx - 2, sy - 2, 4, 4);
-            }
-        }
-
-        function drawFlag(x, y) {
-            ctx.fillStyle = "#5a3a1a";
-            ctx.fillRect(x, y, 4, 100);
-            ctx.fillStyle = "#e74c3c";
-            ctx.beginPath();
-            ctx.moveTo(x + 4, y);
-            ctx.lineTo(x + 40, y + 15);
-            ctx.lineTo(x + 4, y + 30);
-            ctx.closePath();
-            ctx.fill();
+            ctx.restore();
         }
 
         function drawPlayer() {
             if (state.invulnerable > 0 && Math.floor(state.invulnerable / 5) % 2 === 0) return;
-            const x = player.x, y = player.y, f = player.facing;
-            const walking = Math.abs(player.vx) > 0.5 && player.onGround;
-            const frame = player.animFrame;
-
             ctx.save();
-            ctx.translate(x + player.w / 2, y + player.h / 2);
-            if (f < 0) ctx.scale(-1, 1);
-            ctx.translate(-player.w / 2, -player.h / 2);
+            ctx.translate(player.x + player.w / 2, player.y + player.h / 2);
+            ctx.scale(player.facing, 1);
 
-            ctx.fillStyle = "rgba(0,0,0,0.3)";
+            const legSwing = Math.sin(player.animFrame * Math.PI / 2) * 6;
+            ctx.strokeStyle = "#1E3A8A";
+            ctx.lineWidth = 5;
             ctx.beginPath();
-            ctx.ellipse(player.w / 2, player.h + 2, 12, 3, 0, 0, Math.PI * 2);
+            ctx.moveTo(-4, 8); ctx.lineTo(-4 + legSwing, 20);
+            ctx.moveTo(4, 8); ctx.lineTo(4 - legSwing, 20);
+            ctx.stroke();
+
+            ctx.fillStyle = "#E67E22";
+            ctx.fillRect(-8, -6, 16, 15);
+
+            ctx.fillStyle = "#FCD5B5";
+            ctx.beginPath();
+            ctx.arc(0, -13, 8, 0, Math.PI * 2);
             ctx.fill();
 
-            const legOffset = walking ? Math.sin(frame * Math.PI / 2) * 4 : 0;
-            ctx.fillStyle = "#3d2817";
-            ctx.fillRect(6, 28, 6, 12 + legOffset);
-            ctx.fillRect(16, 28, 6, 12 - legOffset);
-            ctx.fillStyle = "#1a0f08";
-            ctx.fillRect(5, 38 + legOffset, 8, 3);
-            ctx.fillRect(15, 38 - legOffset, 8, 3);
-            ctx.fillStyle = "#c19a6b";
-            ctx.fillRect(5, 16, 18, 14);
-            ctx.fillStyle = "#5a3a1a";
-            ctx.fillRect(5, 27, 18, 3);
-            ctx.fillStyle = "#ffd700";
-            ctx.fillRect(12, 27, 4, 3);
-            const armOffset = walking ? Math.sin(frame * Math.PI / 2) * 3 : 0;
-            ctx.fillStyle = "#c19a6b";
-            ctx.fillRect(1, 18 + armOffset, 5, 10);
-            ctx.fillRect(22, 18 - armOffset, 5, 10);
-            ctx.fillStyle = "#f4c8a0";
-            ctx.fillRect(1, 26 + armOffset, 5, 3);
-            ctx.fillRect(22, 26 - armOffset, 5, 3);
-            ctx.fillStyle = "#f4c8a0";
-            ctx.fillRect(7, 4, 14, 13);
-            ctx.fillStyle = "#3d2817";
-            ctx.fillRect(7, 4, 14, 4);
-            ctx.fillStyle = "#000";
-            ctx.fillRect(11, 10, 2, 2);
-            ctx.fillRect(17, 10, 2, 2);
-            ctx.fillRect(13, 14, 4, 1);
-            ctx.fillStyle = "#8b5a2b";
-            ctx.fillRect(4, 2, 20, 3);
-            ctx.fillRect(8, -2, 12, 4);
-            ctx.fillStyle = "#6b3f1a";
-            ctx.fillRect(8, 1, 12, 1);
+            ctx.fillStyle = "#D4A017";
+            ctx.fillRect(-12, -20, 24, 4);
+            ctx.fillRect(-7, -25, 14, 6);
+
             ctx.restore();
         }
 
@@ -1368,7 +1196,7 @@ nada pelo histórico Porto das Barcas em busca do tesouro lendário. Colete cris
             requestAnimationFrame(loop);
         }
 
-        loadPhase(1);
+        updateHUD();
         loop();
     </script>
 </body>
